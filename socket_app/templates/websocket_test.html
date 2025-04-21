@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Location Tracker</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #connection-status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        #location-form {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #event-log {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-meta {
+            color: #6c757d;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Location Tracker</h1>
+
+    <div id="connection-status" class="disconnected">
+        Status: Disconnected
+    </div>
+
+    <div id="location-form">
+        <h2>Update Your Location</h2>
+        <div>
+            <label for="user_id">User ID:</label>
+            <input id="user_id" type="text" value="user123">
+        </div>
+        <div>
+            <label for="latitude">Latitude:</label>
+            <input id="latitude" type="number" step="0.000001" value="28.6139">
+        </div>
+        <div>
+            <label for="longitude">Longitude:</label>
+            <input id="longitude" type="number" step="0.000001" value="77.2090">
+        </div>
+        <button onclick="updateLocation()">Update Location</button>
+    </div>
+
+    <h2>Event Log</h2>
+    <div id="event-log"></div>
+
+    <script>
+        // Global socket instance
+        let socket;
+        let currentSid = null;
+
+        function connectSocket() {
+            // Connect to Socket.IO server
+            socket = io('http://localhost:8007', {
+                transports: ['websocket'],
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+            });
+
+            // Connection events
+            socket.on('connect', () => {
+                currentSid = socket.id;
+                updateStatus('connected', `Connected with SID: ${currentSid}`);
+                logEvent('connect', { sid: currentSid });
+            });
+
+            socket.on('disconnect', (reason) => {
+                updateStatus('disconnected', `Disconnected: ${reason}`);
+                logEvent('disconnect', { reason });
+            });
+
+            socket.on('connect_error', (error) => {
+                logEvent('connect_error', { error: error.message });
+            });
+
+            // Custom message handler
+            socket.on('message', (data) => {
+                logEvent('server-message', data);
+            });
+
+            // For debugging all events
+            socket.onAny((eventName, ...args) => {
+                if (!['message', 'connect', 'disconnect'].includes(eventName)) {
+                    logEvent(eventName, args[0]);
+                }
+            });
+        }
+
+        function updateLocation() {
+            const locationData = {
+                user_id: document.getElementById('user_id').value,
+                latitude: parseFloat(document.getElementById('latitude').value),
+                longitude: parseFloat(document.getElementById('longitude').value)
+            };
+
+            logEvent('client-send', {
+                event: 'update_location',
+                data: locationData
+            });
+
+            socket.emit('update_location', locationData, (response) => {
+                logEvent('server-ack', response);
+            });
+        }
+
+        function updateStatus(status, message) {
+            const statusEl = document.getElementById('connection-status');
+            statusEl.className = status;
+            statusEl.innerHTML = `Status: ${message}`;
+        }
+
+        function logEvent(type, data) {
+            const logEl = document.getElementById('event-log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const timestamp = new Date().toLocaleTimeString();
+            const meta = document.createElement('div');
+            meta.className = 'log-meta';
+            meta.textContent = `${timestamp} [${type}] SID: ${currentSid || 'N/A'}`;
+            
+            const content = document.createElement('div');
+            content.textContent = JSON.stringify(data, null, 2);
+
+            entry.appendChild(meta);
+            entry.appendChild(content);
+            logEl.appendChild(entry);
+
+            // Auto-scroll to bottom
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        // Initialize connection when page loads
+        window.onload = connectSocket;
+    </script>
+</body>
+</html>
