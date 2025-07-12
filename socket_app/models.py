@@ -10,6 +10,20 @@ class BaseModel(models.Model):
     class Meta:
         abstract = True  # This makes it a base model (not stored in DB)
 
+class APIConfig(BaseModel):
+    name = models.CharField(max_length=100, unique=True)
+    url = models.URLField()
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name
+
+    @classmethod
+    def get_url(cls, name, default=None):
+        try:
+            return cls.objects.get(name=name).url
+        except cls.DoesNotExist:
+            return default
 
 class SocketSettings(BaseModel):
     frequency = models.IntegerField(help_text="Socket connection frequency in minutes")

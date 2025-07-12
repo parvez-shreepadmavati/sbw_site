@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import SocketSettings, LocationData
+from .models import SocketSettings, LocationData, APIConfig
+import urllib.parse
+import urllib.request
+import json
 # Register your models here.
 # admin.site.register(SocketSettings)
 # admin.site.register(LocationData)
@@ -11,22 +14,22 @@ from django.contrib import admin
 from .models import LocationData
 from django.utils.html import format_html
 
+admin.site.register(APIConfig)
+
 @admin.register(LocationData)
 class LocationDataAdmin(admin.ModelAdmin):
-    list_display = ('user_id', 'socket_id', 'latitude', 'longitude', 'date', 'time', 'timestamp')
-    # list_display = ('user_id', 'socket_id', 'latitude', 'longitude', 'date', 'time', 'timestamp', 'map_link')
-    search_fields = ('user_id', 'date', 'socket_id')
+    list_display = ('user_id', 'socket_id', 'latitude', 'longitude', 'date', 'time', 'timestamp', 'map_link')
+    search_fields = ('user_id', 'date', 'socket_id', 'latitude', 'longitude')
     list_filter = ('date', 'user_id')
 
     fieldsets = (
         ("User Information", {"fields": ("user_id",)}),
-        ("Location Details", {"fields": ("latitude", "longitude")}),
-        # ("Location Details", {"fields": ("latitude", "longitude", "map_preview")}),
+        ("Location Details", {"fields": ("latitude", "longitude", "map_preview", "address_preview")}),
         ("Timestamps", {"fields": ("date", "time", "timestamp")}),
     )
 
-    readonly_fields = ('map_preview', 'user_id', 'socket_id', 'latitude', 'longitude', 'date', 'time', 'timestamp')
-
+    # readonly_fields = ('map_preview', 'address_preview', 'user_id', 'socket_id', 'latitude', 'longitude', 'date', 'time', 'timestamp')
+    readonly_fields = ('map_preview', 'address_preview', )
 
     def map_preview(self, obj):
         if obj.latitude and obj.longitude:
@@ -38,7 +41,6 @@ class LocationDataAdmin(admin.ModelAdmin):
                 lon=obj.longitude
             )
         return "No coordinates available"
-
     map_preview.short_description = "Map Preview"
 
     def map_link(self, obj):
@@ -49,8 +51,39 @@ class LocationDataAdmin(admin.ModelAdmin):
                 lon=obj.longitude
             )
         return "-"
-
     map_link.short_description = "Map Link"
+
+    def address_preview(self, obj):
+        if obj.latitude and obj.longitude:
+            try:
+                params = urllib.parse.urlencode({
+                    'format': 'json',
+                    'lat': obj.latitude,
+                    'lon': obj.longitude,
+                    'zoom': 18,
+                    'addressdetails': 1
+                })
+                url = f"https://nominatim.openstreetmap.org/reverse?{params}"
+                headers = {'User-Agent': 'Mozilla/5.0 (DjangoAdminApp)'}
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req) as response:
+                    data = json.loads(response.read().decode('utf-8'))
+                    if 'display_name' in data:
+                        return format_html('<p>{}</p>', data['display_name'])
+                    else:
+                        return "Address not found"
+            except Exception as e:
+                return f"Error fetching address: {e}"
+        return "No coordinates available"
+    address_preview.short_description = "Address (Reverse Geocoded)"
+
+    # # This removes the "Add" button
+    # def has_add_permission(self, request, obj=None):
+    #     return False
+    #
+    # # Optional: Also remove delete permissions
+    # def has_delete_permission(self, request, obj=None):
+    #     return False
 
 
 @admin.register(SocketSettings)
